@@ -10,6 +10,7 @@
 #include "../common/endian.h"
 #include "../common/rgb.h"
 #include "../common/fs.h"
+#include "utf8.h"
 
 tGlyphSet tGlyphSet::fromTtf(
 	const std::string &szTtfPath, uint8_t ubSize, const std::string &szCharSet,
@@ -35,38 +36,47 @@ tGlyphSet tGlyphSet::fromTtf(
 	FT_Set_Pixel_Sizes(Face, 0, ubSize);
 
 	uint8_t ubMaxBearing = 0, ubMaxAddHeight = 0;
+  uint32_t ulCodepoint, ulState = 0;
 	for(const auto &c: szCharSet) {
-		FT_Load_Char(Face, c, FT_LOAD_RENDER);
+		auto CharCode = *reinterpret_cast<const uint8_t*>(&c);
+		if (
+			decode(&ulState, &ulCodepoint, CharCode) != UTF8_ACCEPT ||
+			ulCodepoint == '\n' || ulCodepoint == '\r'
+		) {
+			continue;
+		}
+
+		FT_Load_Char(Face, ulCodepoint, FT_LOAD_RENDER);
 
 		uint8_t ubWidth = Face->glyph->bitmap.width;
 		uint8_t ubHeight = Face->glyph->bitmap.rows;
 
-		GlyphSet.m_mGlyphs[c] = {
+		GlyphSet.m_mGlyphs[ulCodepoint] = {
 			static_cast<uint8_t>(Face->glyph->metrics.horiBearingY / 64),
 			ubWidth, ubHeight, std::vector<uint8_t>(ubWidth * ubHeight, 0xFF)
 		};
+		auto &Glyph = GlyphSet.m_mGlyphs[ulCodepoint];
 
 		// Copy bitmap graphics with threshold
-		for(uint32_t ulPos = 0; ulPos < GlyphSet.m_mGlyphs[c].vData.size(); ++ulPos) {
+		for(uint32_t ulPos = 0; ulPos < Glyph.vData.size(); ++ulPos) {
 			uint8_t ubVal = (Face->glyph->bitmap.buffer[ulPos] >= ubThreshold) ? 0x00 : 0xFF;
-			GlyphSet.m_mGlyphs[c].vData[ulPos] = ubVal;
+			Glyph.vData[ulPos] = ubVal;
 		}
 
 		// Trim left & right
 		if(ubWidth != 0 && ubWidth != 0) {
-			GlyphSet.m_mGlyphs[c].trimHorz(false);
-			GlyphSet.m_mGlyphs[c].trimHorz(true);
+			Glyph.trimHorz(false);
+			Glyph.trimHorz(true);
 		}
 		else {
 			// At least write proper width
-			GlyphSet.m_mGlyphs[c].ubWidth = Face->glyph->metrics.horiAdvance / 64;
+			Glyph.ubWidth = Face->glyph->metrics.horiAdvance / 64;
 		}
 
-		ubMaxBearing = std::max(ubMaxBearing, GlyphSet.m_mGlyphs[c].ubBearing);
+		ubMaxBearing = std::max(ubMaxBearing, Glyph.ubBearing);
 		ubMaxAddHeight = std::max(
-			ubMaxAddHeight, static_cast<uint8_t>(
-				GlyphSet.m_mGlyphs[c].ubHeight - GlyphSet.m_mGlyphs[c].ubBearing
-			)
+			ubMaxAddHeight,
+			static_cast<uint8_t>(std::max(0, Glyph.ubHeight - Glyph.ubBearing))
 		);
 	}
 	FT_Done_Face(Face);
@@ -269,4 +279,24 @@ void tGlyphSet::toAceFont(const std::string &szFontPath)
 bool tGlyphSet::isOk(void)
 {
 	return m_mGlyphs.size() != 0;
+}
+
+bool tGlyphSet::remapGlyphs(const std::vector<std::pair<uint32_t, uint32_t>> &vFromTo)
+{
+	// Extract one by one and replace key so that other elements won't
+	// be overwritten before key changing
+	// This allows 'a' <=> 'b' replacement in one go
+	std::vector<decltype(m_mGlyphs)::node_type> vExtracted;
+	for(const auto &FromTo: vFromTo) {
+		auto Pos = m_mGlyphs.find(FromTo.first);
+		if(Pos != m_mGlyphs.end()) {
+			auto Node = m_mGlyphs.extract(Pos);
+			Node.key() = FromTo.second;
+			vExtracted.push_back(std::move(Node));
+		}
+	}
+
+	for(auto &Node: vExtracted) {
+		m_mGlyphs.insert(std::move(Node));
+	}
 }

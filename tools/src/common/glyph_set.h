@@ -27,6 +27,8 @@ public:
 
 	bool isOk(void);
 
+	bool remapGlyphs(const std::vector<std::pair<uint32_t, uint32_t>> &vFromTo);
+
 private:
 	struct tBitmapGlyph {
 		uint8_t ubBearing;
@@ -36,7 +38,7 @@ private:
 		void trimHorz(bool isRight);
 	};
 
-	std::map<char, tBitmapGlyph> m_mGlyphs;
+	std::map<uint32_t, tBitmapGlyph> m_mGlyphs;
 };
 
 #endif // _ACE_TOOLS_COMMON_GLYPH_SET_H_
