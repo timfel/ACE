@@ -12,13 +12,30 @@ extern "C" {
 #include <stdio.h>
 #include <ace/types.h>
 
-#define FILE_SEEK_CURRENT SEEK_CUR
-#define FILE_SEEK_SET SEEK_SET
-#define FILE_SEEK_END SEEK_END
+typedef enum _tFileSeekMode {
+	FILE_SEEK_CURRENT,
+	FILE_SEEK_SET,
+	FILE_SEEK_END,
+	FILE_SEEK_COUNT,
+} tFileSeekMode;
 
-typedef FILE tFile;
+typedef struct _tFile {
+	UBYTE isMem;
+	union {
+		struct {
+			const UBYTE *pData;
+			UWORD uwPos;
+			UWORD uwSize;
+		} asMem;
+		struct {
+			FILE *pHandle;
+		} asFile;
+	};
+} tFile;
 
 tFile *fileOpen(const char *szPath, const char *szMode);
+
+tFile *fileOpenFromMem(const UBYTE *pData, UWORD uwSize);
 
 void fileClose(tFile *pFile);
 
@@ -26,7 +43,7 @@ ULONG fileRead(tFile *pFile, void *pDest, ULONG ulSize);
 
 ULONG fileWrite(tFile *pFile, void *pSrc, ULONG ulSize);
 
-ULONG fileSeek(tFile *pFile, ULONG ulPos, WORD wMode);
+UBYTE fileSeek(tFile *pFile, LONG lPos, tFileSeekMode eMode);
 
 ULONG fileGetPos(tFile *pFile);
 

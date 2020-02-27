@@ -31,16 +31,34 @@ LONG fileGetSize(const char *szPath) {
 }
 
 tFile *fileOpen(const char *szPath, const char *szMode) {
-	// TODO check if disk is read protected when szMode has 'a'/'r'/'x'
+	// TODO check if disk is read protected when szMode has 'a'/'w'/'x'
 	systemUse();
-	FILE *pFile = fopen(szPath, szMode);
+	tFile *pFile = 0;
+	FILE *pHandle = fopen(szPath, szMode);
+	if(pHandle) {
+		pFile = memAllocFast(sizeof(*pFile));
+		pFile->isMem = 0;
+		pFile->asFile.pHandle = pHandle;
+	}
 	systemUnuse();
+	return pFile;
+}
+
+tFile *fileOpenFromMem(const UBYTE *pData, UWORD uwSize) {
+	tFile *pFile = memAllocFast(sizeof(*pFile));
+	pFile->isMem = 1;
+	pFile->asMem.pData = pData;
+	pFile->asMem.uwPos = 0;
+	pFile->asMem.uwSize = uwSize;
 	return pFile;
 }
 
 void fileClose(tFile *pFile) {
 	systemUse();
-	fclose(pFile);
+	if(!pFile->isMem) {
+		fclose(pFile->asFile.pHandle);
+	}
+	memFree(pFile, sizeof(*pFile));
 	systemUnuse();
 }
 
@@ -50,74 +68,140 @@ ULONG fileRead(tFile *pFile, void *pDest, ULONG ulSize) {
 		logWrite("ERR: File read size = 0!\n");
 	}
 #endif
-	systemUse();
-	ULONG ulResult = fread(pDest, ulSize, 1, pFile);
-	systemUnuse();
-	return ulResult;
+	ULONG ulBytesRead;
+	if(pFile->isMem) {
+		ulBytesRead = MIN(pFile->asMem.uwSize - pFile->asMem.uwPos, (LONG)ulSize);
+		memcpy(pDest, &pFile->asMem.pData[pFile->asMem.uwPos], ulBytesRead);
+		pFile->asMem.uwPos += ulBytesRead;
+	}
+	else {
+		systemUse();
+		ulBytesRead = fread(pDest, ulSize, 1, pFile->asFile.pHandle);
+		systemUnuse();
+	}
+	return ulBytesRead;
 }
 
 ULONG fileWrite(tFile *pFile, void *pSrc, ULONG ulSize) {
-	systemUse();
-	ULONG ulResult = fwrite(pSrc, ulSize, 1, pFile);
-	fflush(pFile);
-	systemUnuse();
-	return ulResult;
+	ULONG ulBytesWritten;
+	if(pFile->isMem) {
+		logWrite("ERR: Unimplemented fileWrite for mem!\r\n");
+		ulBytesWritten = 0;
+	}
+	else {
+		systemUse();
+		ulBytesWritten = fwrite(pSrc, ulSize, 1, pFile->asFile.pHandle);
+		fflush(pFile->asFile.pHandle);
+		systemUnuse();
+	}
+	return ulBytesWritten;
 }
 
-ULONG fileSeek(tFile *pFile, ULONG ulPos, WORD wMode) {
-	systemUse();
-	ULONG ulResult = fseek(pFile, ulPos, wMode);
-	systemUnuse();
-	return ulResult;
+UBYTE fileSeek(tFile *pFile, LONG lPos, tFileSeekMode eMode) {
+	UBYTE isOk = 0;
+	if(pFile->isMem) {
+		LONG lNewPos;
+		if(eMode == FILE_SEEK_CURRENT) {
+			lNewPos = pFile->asMem.uwPos + lPos;
+		}
+		else if(eMode == FILE_SEEK_END) {
+			lNewPos = pFile->asMem.uwSize + lPos;
+		}
+		else { // FILE_SEEK_SET
+			lNewPos = lPos;
+		}
+		if(0 <= lNewPos && lNewPos <= pFile->asMem.uwSize) {
+			pFile->asMem.uwPos = lNewPos;
+			isOk = 1;
+		}
+	}
+	else {
+		static const int pModes[FILE_SEEK_COUNT] = {
+			[FILE_SEEK_CURRENT] = SEEK_CUR, [FILE_SEEK_SET] = SEEK_SET,
+			[FILE_SEEK_END] = SEEK_END
+		};
+		systemUse();
+		isOk = !fseek(pFile->asFile.pHandle, lPos, pModes[eMode]);
+		systemUnuse();
+	}
+	return isOk;
 }
 
 ULONG fileGetPos(tFile *pFile) {
-	systemUse();
-	ULONG ulResult = ftell(pFile);
-	systemUnuse();
-	return ulResult;
+	ULONG ulPos;
+	if(pFile->isMem) {
+		ulPos = pFile->asMem.uwPos;
+	}
+	else {
+		systemUse();
+		ulPos = ftell(pFile->asFile.pHandle);
+		systemUnuse();
+	}
+	return ulPos;
 }
 
 UBYTE fileIsEof(tFile *pFile) {
-	systemUse();
-	UBYTE ubResult = feof(pFile);
-	systemUnuse();
-	return ubResult;
+	UBYTE isEof;
+	if(pFile->isMem) {
+		isEof = (pFile->asMem.uwPos == pFile->asMem.uwSize);
+	}
+	else {
+		systemUse();
+		isEof = feof(pFile->asFile.pHandle);
+		systemUnuse();
+	}
+	return isEof;
 }
 
 LONG fileVaPrintf(tFile *pFile, const char *szFmt, va_list vaArgs) {
-	systemUse();
-	LONG lResult = vfprintf(pFile, szFmt, vaArgs);
-	fflush(pFile);
-	systemUnuse();
-	return lResult;
+	LONG lBytesWritten;
+	if(pFile->isMem) {
+		logWrite("ERR: unimplemented fileVaPrintf for mem!\n");
+		lBytesWritten = 0;
+	}
+	else {
+		systemUse();
+		lBytesWritten = vfprintf(pFile->asFile.pHandle, szFmt, vaArgs);
+		fflush(pFile->asFile.pHandle);
+		systemUnuse();
+	}
+	return lBytesWritten;
 }
 
 LONG filePrintf(tFile *pFile, const char *szFmt, ...) {
 	va_list vaArgs;
 	va_start(vaArgs, szFmt);
-	LONG lResult = fileVaPrintf(pFile, szFmt, vaArgs);
+	LONG lBytesWritten = fileVaPrintf(pFile, szFmt, vaArgs);
 	va_end(vaArgs);
-	return lResult;
+	return lBytesWritten;
 }
 
 LONG fileVaScanf(tFile *pFile, const char *szFmt, va_list vaArgs) {
-	systemUse();
-	LONG lResult = vfscanf(pFile, szFmt, vaArgs);
-	systemUnuse();
-	return lResult;
+	LONG lArgsRead;
+	if(pFile->isMem) {
+		logWrite("ERR: unimplemented fileVaScanf for mem!\n");
+		lArgsRead = 0;
+	}
+	else {
+		systemUse();
+		lArgsRead = vfscanf(pFile->asFile.pHandle, szFmt, vaArgs);
+		systemUnuse();
+	}
+	return lArgsRead;
 }
 
 LONG fileScanf(tFile *pFile, const char *szFmt, ...) {
 	va_list vaArgs;
 	va_start(vaArgs, szFmt);
-	LONG lResult = fileVaScanf(pFile, szFmt, vaArgs);
+	LONG lArgsRead = fileVaScanf(pFile, szFmt, vaArgs);
 	va_end(vaArgs);
-	return lResult;
+	return lArgsRead;
 }
 
 void fileFlush(tFile *pFile) {
-	systemUse();
-	fflush(pFile);
-	systemUnuse();
+	if(!pFile->isMem) {
+		systemUse();
+		fflush(pFile->asFile.pHandle);
+		systemUnuse();
+	}
 }
