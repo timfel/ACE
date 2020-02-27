@@ -35,6 +35,8 @@ extern "C" {
  */
 UBYTE memType(const void *pMem);
 
+ULONG memGetChipSize(void);
+
 void _memCreate(void);
 void _memEntryAdd(void *pAddr, ULONG ulSize, UWORD uwLine, char *szFile);
 void _memEntryDelete(void *pAddr, ULONG ulSize, UWORD uwLine, char *szFile);

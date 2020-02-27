@@ -55,11 +55,13 @@ void _memEntryAdd(void *pAddr, ULONG ulSize, UWORD uwLine, char *szFile) {
 	s_pMemTail->uwId = s_uwLastId++;
 	s_pMemTail->pNext = pNext;
 
-	filePrintf(
-		s_pMemLog, "Allocated %s memory %hu@%p, size %lu (%s:%u)\n",
-		(memType(pAddr) & MEMF_CHIP) ? "CHIP" : "FAST",
-		s_pMemTail->uwId, pAddr, ulSize, szFile, uwLine
-	);
+	if(s_pMemLog) {
+		filePrintf(
+			s_pMemLog, "Allocated %s memory %hu@%p, size %lu (%s:%u)\n",
+			(memType(pAddr) & MEMF_CHIP) ? "CHIP" : "FAST",
+			s_pMemTail->uwId, pAddr, ulSize, szFile, uwLine
+		);
+	}
 
 	// Update mem usage counter
 	if(memType(pAddr) & MEMF_CHIP) {
@@ -255,4 +257,8 @@ UBYTE memType(const void *pMem) {
 #else
 	return MEMF_FAST;
 #endif // AMIGA
+}
+
+ULONG memGetChipSize(void) {
+	return AvailMem(MEMF_CHIP);
 }
