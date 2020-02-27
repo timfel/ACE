@@ -42,8 +42,8 @@ void audioCreate(void) {
 void audioDestroy(void) {
 	logBlockBegin("audioDestroy()");
 	for(UBYTE i = 0; i < 4; ++i) {
-		systemSetDma(DMAB_AUD0+i, 0);
-		systemSetInt(INTB_AUD0+i, 0, 0);
+		systemSetDma(DMAB_AUD0 + i, 0);
+		systemSetInt(INTB_AUD0 + i, 0, 0);
 	}
 	logBlockEnd("audioDestroy()");
 }
@@ -96,7 +96,7 @@ tSample *sampleCreateFromFile(const char *szPath, UWORD uwSampleRateHz) {
 	// NOTE: 3546895 is for PAL, for NTSC use 3579545
 	UWORD uwPeriod = (3546895 + uwSampleRateHz/2) / uwSampleRateHz;
 	tSample *pSample = sampleCreate(lLength, uwPeriod);
-	FILE *pSampleFile = fileOpen(szPath, "rb");
+	tFile *pSampleFile = fileOpen(szPath, "rb");
 	fileRead(pSampleFile, pSample->pData, lLength);
 	fileClose(pSampleFile);
 	logBlockEnd("sampleCreateFromFile()");

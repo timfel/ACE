@@ -284,7 +284,7 @@ void bitmapLoadFromMem(
 
 tBitMap *bitmapCreateFromFile(const char *szFilePath, UBYTE isFast) {
 	tBitMap *pBitMap;
-	FILE *pFile;
+	tFile *pFile;
 	UWORD uwWidth, uwHeight;  // Image dimensions
 	UBYTE ubVersion, ubFlags; // Format version & flags
 	UBYTE ubPlaneCount;       // Bitplane count
@@ -436,7 +436,7 @@ void bitmapSaveBmp(
 
 	systemUse();
 	UWORD uwWidth = bitmapGetByteWidth(pBitMap) << 3;
-	FILE *pOut = fileOpen(szFilePath, "w");
+	tFile *pOut = fileOpen(szFilePath, "w");
 
 	// BMP header
 	fileWrite(pOut, "BM", 2);

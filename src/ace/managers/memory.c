@@ -25,7 +25,7 @@ static UWORD s_uwLastId = 0;
 
 /* Vars */
 tMemEntry *s_pMemTail;
-tFile *s_pMemLog;
+tFile *s_pMemLog = 0;
 ULONG s_ulChipUsage, s_ulChipPeakUsage, s_ulFastUsage, s_ulFastPeakUsage;
 
 /* Functions */
