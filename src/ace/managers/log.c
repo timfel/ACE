@@ -6,6 +6,7 @@
 #include <string.h>
 #include <ace/macros.h>
 #include <ace/managers/system.h>
+#include <ace/utils/uae.h>
 #ifdef ACE_DEBUG
 
 // Globals
@@ -66,9 +67,7 @@ void _logWrite(char *szFormat, ...) {
 		fileFlush(g_sLogManager.pFile);
 	}
 	if(s_pUaeFmt) {
-		char szMsg[1024];
-		vsprintf(szMsg, szFormat, vaArgs);
-		*s_pUaeFmt = (ULONG)((UBYTE*)szMsg);
+		uaeVaPrintf(szFormat, vaArgs);
 	}
 	va_end(vaArgs);
 }
